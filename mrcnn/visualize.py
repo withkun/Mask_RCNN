@@ -84,7 +84,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
                       scores=None, title="",
                       figsize=(16, 16), ax=None,
                       show_mask=True, show_bbox=True,
-                      colors=None, captions=None):
+                      colors=None, captions=None, file_name=None, sub_dir=None):
     """
     boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
     masks: [height, width, num_instances]
@@ -99,6 +99,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     """
     # Number of instances
     N = boxes.shape[0]
+    print(N)
     if not N:
         print("\n*** No instances to display *** \n")
     else:
@@ -117,7 +118,7 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     height, width = image.shape[:2]
     ax.set_ylim(height + 10, -10)
     ax.set_xlim(-10, width + 10)
-    ax.axis('off')
+    ax.axis('off')  # 闭坐标轴和边框
     ax.set_title(title)
 
     masked_image = image.astype(np.uint32).copy()
@@ -136,20 +137,20 @@ def display_instances(image, boxes, masks, class_ids, class_names,
             ax.add_patch(p)
 
         # Label
-        if not captions:
-            class_id = class_ids[i]
-            score = scores[i] if scores is not None else None
-            label = class_names[class_id]
-            caption = "{} {:.3f}".format(label, score) if score else label
-        else:
-            caption = captions[i]
-        ax.text(x1, y1 + 8, caption,
-                color='w', size=11, backgroundcolor="none")
+        # if not captions:
+        #     class_id = class_ids[i]
+        #     score = scores[i] if scores is not None else None
+        #     label = class_names[class_id]
+        #     caption = "{} {:.3f}".format(label, score) if score else label
+        # else:
+        #     caption = captions[i]
+        # ax.text(x1, y1 + 8, caption,
+        #         color='w', size=11, backgroundcolor="none")
 
         # Mask
         mask = masks[:, :, i]
-        if show_mask:
-            masked_image = apply_mask(masked_image, mask, color)
+        # if show_mask:
+        #     masked_image = apply_mask(masked_image, mask, color)
 
         # Mask Polygon
         # Pad to ensure proper polygons for masks that touch image edges.
@@ -165,7 +166,66 @@ def display_instances(image, boxes, masks, class_ids, class_names,
     ax.imshow(masked_image.astype(np.uint8))
     if auto_show:
         plt.show()
+        plt.savefig('result/' + file_name)
+        plt.close('all')
 
+
+def display_instances_plot(image, boxes, masks, class_ids, class_names,
+                      scores=None, title="",
+                      figsize=(16, 16), k=0, ax=None, threshold=1):
+    """
+    boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
+    masks: [height, width, num_instances]
+    class_ids: [num_instances]
+    class_names: list of class names of the dataset
+    scores: (optional) confidence scores for each box
+    figsize: (optional) the size of the image.
+    """
+    # Number of dim
+    N = class_ids.shape[0]
+    ax.axis('off')
+    # ax.set_title(title)
+    q = 0
+    masked_image = image.astype(np.uint32).copy()
+    for i in range(N):
+        colors = random_colors(N)
+        color = colors[i]
+        mask = masks[:, :, i]  # i-th dim
+
+        if np.sum(mask == 1) > threshold:
+            q = q + 1
+            padded_mask = np.zeros(
+                (mask.shape[0] + 2, mask.shape[1] + 2), dtype=np.uint8)
+            padded_mask[1:-1, 1:-1] = mask
+            contours = find_contours(padded_mask, 0.5)
+            for verts in contours:
+                verts = np.fliplr(verts) - 1
+                p = Polygon(verts, facecolor="none", edgecolor=color)
+                ax.add_patch(p)
+
+    print("{} stone have larger than {}".format(q, threshold))
+    root_path = os.getcwd()
+    txt_path = os.path.join(root_path, "images/big_stone.txt")
+    image_path = os.path.join(root_path, "images")
+    result_path = os.path.join(image_path, "test_plot")
+    all_name = natsort.natsorted(os.listdir(image_path + "/origin/"))
+    true_result = image_path + '/true_result/'
+
+    file = open(txt_path, 'a')
+    file.write("Img{} : {} stone have larger than {}".format(all_name[k], q, threshold) + "\n")
+    file.close()
+    ax.imshow(masked_image.astype(np.uint8))
+    plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+    # plt.show()
+
+    # image = skimage.io.imread(image_path + "/origin/" + str(all_name[k]))
+    # width = image.shape[0]
+    # height = image.shape[1]
+    # dim = masked_image.shape[2]
+    plt.savefig(true_result + "/" + str(all_name[k]).split('.')[0] + '.jpg')
+    plt.show()
+    plt.close('all')
+    return masked_image.astype(np.uint8)
 
 def display_differences(image,
                         gt_box, gt_class_id, gt_mask,
@@ -299,6 +359,7 @@ def display_top_masks(image, mask, class_ids, class_names, limit=4):
         m = np.sum(m * np.arange(1, m.shape[-1] + 1), -1)
         to_display.append(m)
         titles.append(class_names[class_id] if class_id != -1 else "-")
+    print('--- before display_image ---')
     display_images(to_display, titles=titles, cols=limit + 1, cmap="Blues_r")
 
 
